@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>That Ain't Real — AI & Fake Image Detector</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text x='16' y='24' font-size='20' text-anchor='middle'>🔍</text></svg>" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="That Ain't Real" />
+  <meta property="og:description" content="Upload a photo and find out if it's real or AI-generated. Instant forensic analysis with a fake confidence score." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://thataintreal.explosiveconcepts.com" />
+  <meta property="og:image" content="https://thataintreal.explosiveconcepts.com/thataintreal.jpg" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="That Ain't Real" />
+  <meta name="twitter:description" content="Upload a photo and find out if it's real or AI-generated. Instant forensic analysis with a fake confidence score." />
+  <meta name="twitter:image" content="https://thataintreal.explosiveconcepts.com/thataintreal.jpg" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .dropzone-active { border-color: #6366f1 !important; background: #f0f0ff; }
+    .score-ring { transition: stroke-dashoffset 1s ease; }
+    .signal-badge { transition: all 0.2s; }
+    canvas { display: block; max-width: 100%; height: auto; }
+    .fade-in { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-[#efefef] min-h-screen flex items-center justify-center p-4">
+
+<!-- ── Upload View ── -->
+<div id="upload-view" class="w-full max-w-sm fade-in">
+  <div class="flex justify-center mb-5">
+    <img src="thataintreal.jpg" alt="That Ain't Real"
+         class="w-72 rounded-2xl border-2 border-gray-300 shadow-sm" />
+  </div>
+  <div class="bg-white rounded-2xl shadow-lg px-8 pt-8 pb-7">
+    <h1 class="text-2xl font-bold text-gray-800 text-center mb-6">Upload a photo to see if it's real or AI...</h1>
+
+    <div id="dropzone"
+         class="border-2 border-dashed border-gray-300 rounded-xl px-6 py-8 flex flex-col items-center gap-2 cursor-pointer hover:border-gray-400 transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M3 7a2 2 0 012-2h3.172a2 2 0 011.414.586l1.828 1.828A2 2 0 0012.828 8H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0 0l-2-2m2 2l2-2"/>
+      </svg>
+      <p class="text-sm text-gray-500 text-center">
+        Drag &amp; drop files here, or
+        <span class="text-blue-500 underline cursor-pointer" id="browse-link">browse</span>
+      </p>
+      <p class="text-xs text-gray-400 text-center">(PNG, JPG, WEBP, up to 10MB each)</p>
+    </div>
+
+    <input type="file" id="file-input" class="hidden" accept="image/jpeg,image/png,image/webp" />
+
+    <div id="selected-file" class="hidden mt-3 text-sm text-gray-600 text-center truncate"></div>
+    <div id="upload-error" class="hidden mt-3 text-sm text-red-500 text-center"></div>
+
+    <button id="upload-btn"
+            class="w-full mt-5 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+      Upload
+    </button>
+  </div>
+
+  <p class="text-center text-xs text-gray-400 mt-4">
+    <span class="font-semibold text-gray-500">That Ain't Real</span> — AI &amp; Fake Image Detector
+  </p>
+</div>
+
+<!-- ── Results View ── -->
+<div id="results-view" class="hidden w-full max-w-5xl fade-in">
+  <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+
+    <!-- Header bar -->
+    <div id="results-header" class="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+      <button id="analyze-another"
+              class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Analyze Another
+      </button>
+      <span id="category-badge" class="px-3 py-1 rounded-full text-sm font-semibold"></span>
+    </div>
+
+    <!-- Body -->
+    <div class="flex flex-col md:flex-row">
+
+      <!-- Left: image + canvas -->
+      <div class="md:w-1/2 p-6 flex flex-col items-center justify-start">
+        <div id="canvas-container" class="w-full rounded-xl overflow-hidden bg-gray-100"></div>
+        <!-- Highlight legend -->
+        <div id="highlight-legend" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+      </div>
+
+      <!-- Right: score + details -->
+      <div class="md:w-1/2 p-6 border-t md:border-t-0 md:border-l border-gray-100 flex flex-col gap-5">
+
+        <!-- Score -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-medium text-gray-500">Fake Score</span>
+            <span id="score-value" class="text-3xl font-bold"></span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+            <div id="score-bar" class="h-3 rounded-full transition-all duration-1000" style="width:0%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-400 mt-1">
+            <span>Real</span><span>Fake</span>
+          </div>
+        </div>
+
+        <!-- Explanation -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-600 mb-1">Analysis</h3>
+          <p id="explanation" class="text-sm text-gray-700 leading-relaxed"></p>
+        </div>
+
+        <!-- Signals -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-600 mb-2">Detection Signals</h3>
+          <div id="signals-list" class="flex flex-col gap-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-xs text-gray-400 mt-4">
+    <span class="font-semibold text-gray-500">That Ain't Real</span> — AI &amp; Fake Image Detector
+  </p>
+</div>
+
+<script>
+  const BACKEND_URL = 'http://localhost:8001';
+
+  // ── State ──
+  let selectedFile = null;
+
+  // ── Elements ──
+  const uploadView    = document.getElementById('upload-view');
+  const resultsView   = document.getElementById('results-view');
+  const dropzone      = document.getElementById('dropzone');
+  const fileInput     = document.getElementById('file-input');
+  const browseLink    = document.getElementById('browse-link');
+  const selectedLabel = document.getElementById('selected-file');
+  const uploadError   = document.getElementById('upload-error');
+  const uploadBtn     = document.getElementById('upload-btn');
+  const analyzeBtn    = document.getElementById('analyze-another');
+
+  // ── View toggle ──
+  function showView(name) {
+    uploadView.classList.toggle('hidden', name !== 'upload');
+    resultsView.classList.toggle('hidden', name !== 'results');
+    if (name === 'upload') {
+      uploadView.classList.add('fade-in');
+    } else {
+      resultsView.classList.add('fade-in');
+    }
+  }
+
+  // ── File selection ──
+  function setFile(file) {
+    if (!file) return;
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+      showError('Please select a JPEG, PNG, or WEBP image.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showError('File is too large. Maximum size is 10 MB.');
+      return;
+    }
+    selectedFile = file;
+    selectedLabel.textContent = file.name;
+    selectedLabel.classList.remove('hidden');
+    hideError();
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  browseLink.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dropzone-active'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dropzone-active'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dropzone-active');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  // ── Upload & analyze ──
+  uploadBtn.addEventListener('click', async () => {
+    if (!selectedFile) { showError('Please select an image first.'); return; }
+    hideError();
+    setLoading(true);
+
+    const warmupTimer = setTimeout(() => {
+      uploadBtn.innerHTML = `
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        </svg>
+        Warming up analyzer…`;
+    }, 3000);
+
+    try {
+      const form = new FormData();
+      form.append('file', selectedFile);
+      const res = await fetch(`${BACKEND_URL}/analyze`, { method: 'POST', body: form });
+      clearTimeout(warmupTimer);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(err.detail || `Server error ${res.status}`);
+      }
+
+      const data = await res.json();
+      renderResults(data, selectedFile);
+      showView('results');
+    } catch (err) {
+      clearTimeout(warmupTimer);
+      showError(err.message || 'Analysis failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  analyzeBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    selectedLabel.classList.add('hidden');
+    hideError();
+    showView('upload');
+  });
+
+  // ── Helpers ──
+  function showError(msg) {
+    uploadError.textContent = msg;
+    uploadError.classList.remove('hidden');
+  }
+  function hideError() {
+    uploadError.classList.add('hidden');
+  }
+  function setLoading(on) {
+    uploadBtn.disabled = on;
+    uploadBtn.innerHTML = on
+      ? `<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+         </svg>Analyzing…`
+      : 'Upload';
+  }
+
+  // ── Render results ──
+  function scoreColor(score) {
+    if (score <= 25)  return { bg: '#22c55e', text: 'text-green-600',  ring: '#22c55e', badgeBg: 'bg-green-100',  badgeText: 'text-green-700'  };
+    if (score <= 50)  return { bg: '#eab308', text: 'text-yellow-600', ring: '#eab308', badgeBg: 'bg-yellow-100', badgeText: 'text-yellow-700' };
+    if (score <= 75)  return { bg: '#f97316', text: 'text-orange-600', ring: '#f97316', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700' };
+    return              { bg: '#ef4444', text: 'text-red-600',    ring: '#ef4444', badgeBg: 'bg-red-100',    badgeText: 'text-red-700'    };
+  }
+
+  function renderResults(data, file) {
+    const score    = Math.max(1, Math.min(100, data.fake_score || 1));
+    const category = data.category || 'Unknown';
+    const colors   = scoreColor(score);
+
+    // Category badge
+    const badge = document.getElementById('category-badge');
+    badge.textContent = category;
+    badge.className = `px-3 py-1 rounded-full text-sm font-semibold ${colors.badgeBg} ${colors.badgeText}`;
+
+    // Score bar (animate after brief delay)
+    const scoreEl = document.getElementById('score-value');
+    scoreEl.textContent = score + '/100';
+    scoreEl.className = `text-3xl font-bold ${colors.text}`;
+    setTimeout(() => {
+      document.getElementById('score-bar').style.width = score + '%';
+      document.getElementById('score-bar').style.background = colors.bg;
+    }, 100);
+
+    // Explanation
+    document.getElementById('explanation').textContent = data.explanation || '';
+
+    // Signals
+    const signalsList = document.getElementById('signals-list');
+    signalsList.innerHTML = '';
+    (data.signals || []).forEach(sig => {
+      const el = document.createElement('div');
+      el.className = 'flex items-start gap-2 text-sm';
+      el.innerHTML = `
+        <span class="mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold
+              ${sig.triggered ? `text-white` : 'bg-gray-100 text-gray-400'}"
+              style="${sig.triggered ? `background:${colors.bg}` : ''}">
+          ${sig.triggered ? '✓' : '✗'}
+        </span>
+        <div>
+          <span class="font-medium ${sig.triggered ? colors.text : 'text-gray-400'}">${sig.name}</span>
+          ${sig.detail ? `<p class="text-xs text-gray-400 mt-0.5">${sig.detail}</p>` : ''}
+        </div>`;
+      signalsList.appendChild(el);
+    });
+
+    // Canvas highlights
+    renderHighlights(file, data.highlights || [], colors);
+  }
+
+  function renderHighlights(file, highlights, colors) {
+    const container = document.getElementById('canvas-container');
+    const legend    = document.getElementById('highlight-legend');
+    container.innerHTML = '';
+    legend.innerHTML    = '';
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      const severityColor = {
+        low:    'rgba(234,179,8,0.35)',
+        medium: 'rgba(249,115,22,0.45)',
+        high:   'rgba(239,68,68,0.50)',
+      };
+      const severityBorder = {
+        low:    'rgba(234,179,8,0.9)',
+        medium: 'rgba(249,115,22,0.9)',
+        high:   'rgba(239,68,68,0.9)',
+      };
+
+      highlights.forEach((h, i) => {
+        const [xp, yp, wp, hp] = h.region;
+        const x = xp * canvas.width;
+        const y = yp * canvas.height;
+        const w = wp * canvas.width;
+        const hh = hp * canvas.height;
+        const fill   = severityColor[h.severity]  || severityColor.medium;
+        const border = severityBorder[h.severity] || severityBorder.medium;
+
+        ctx.fillStyle = fill;
+        ctx.fillRect(x, y, w, hh);
+        ctx.strokeStyle = border;
+        ctx.lineWidth = Math.max(2, canvas.width * 0.003);
+        ctx.strokeRect(x, y, w, hh);
+
+        // Label tag
+        const label = h.label || `Region ${i+1}`;
+        const fontSize = Math.max(12, canvas.width * 0.018);
+        ctx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+        const metrics  = ctx.measureText(label);
+        const padX = 6, padY = 4;
+        const tagW = metrics.width + padX * 2;
+        const tagH = fontSize + padY * 2;
+        const tagX = Math.min(x, canvas.width - tagW - 2);
+        const tagY = y > tagH + 4 ? y - tagH - 4 : y + hh + 4;
+
+        ctx.fillStyle = border;
+        ctx.beginPath();
+        ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, tagX + padX, tagY + padY + fontSize * 0.82);
+      });
+
+      container.appendChild(canvas);
+
+      // Legend
+      if (highlights.length > 0) {
+        highlights.forEach((h, i) => {
+          const dot = document.createElement('span');
+          dot.className = 'flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded-full';
+          const dotColor = severityBorder[h.severity] || severityBorder.medium;
+          dot.innerHTML = `<span class="w-2 h-2 rounded-full inline-block" style="background:${dotColor}"></span>${h.label || `Region ${i+1}`}`;
+          legend.appendChild(dot);
+        });
+      }
+    };
+    img.src = URL.createObjectURL(file);
+  }
+</script>
+</body>
+</html>
