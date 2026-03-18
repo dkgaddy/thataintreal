@@ -51,7 +51,7 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0 0l-2-2m2 2l2-2"/>
       </svg>
       <p class="text-sm text-gray-500 text-center">
-        Drag &amp; drop files here, or
+        Drag &amp; drop a photo here, or
         <span class="text-blue-500 underline cursor-pointer" id="browse-link">browse</span>
       </p>
       <p class="text-xs text-gray-400 text-center">(PNG, JPG, WEBP, up to 10MB each)</p>
@@ -64,12 +64,15 @@
 
     <button id="upload-btn"
             class="w-full mt-5 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
-      Upload
+      Examine Now
     </button>
   </div>
 
   <p class="text-center text-xs text-gray-400 mt-4">
     <span class="font-semibold text-gray-500">That Ain't Real</span> — AI &amp; Fake Image Detector
+  </p>
+  <p class="text-center text-xs text-gray-400 mt-2 px-2">
+    <span class="font-medium">Disclaimer:</span> This tool is not an exact science. Detection scores can be unreliable on sophisticated AI-generated images that convincingly mimic real photography. Use results as a guide, not a definitive verdict.
   </p>
 </div>
 
@@ -254,7 +257,7 @@
            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
          </svg>Analyzing…`
-      : 'Upload';
+      : 'Examine Now';
   }
 
   // ── Render results ──
