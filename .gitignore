@@ -1,5 +1,7 @@
 learnhere/
 backend/.env
+backend/test_results.json
+backend/.venv/
 __pycache__/
 *.pyc
 *.pyo

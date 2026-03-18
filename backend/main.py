@@ -62,14 +62,15 @@ async def analyze(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-    # Ensure Missing EXIF signal is correct based on server-side extraction
+    # Correct EXIF signal only when EXIF IS present — prevent Claude from falsely
+    # claiming it's missing. When EXIF is absent, let Claude's contextual
+    # reasoning stand rather than forcing the signal to triggered.
     if "signals" in result:
         for signal in result["signals"]:
             if signal.get("name") == "Missing EXIF":
-                if not has_exif:
-                    signal["triggered"] = True
-                    if not signal.get("detail"):
-                        signal["detail"] = "No EXIF metadata found in this image"
+                if has_exif:
+                    signal["triggered"] = False
+                    signal["detail"] = "EXIF metadata present"
                 break
 
     return JSONResponse(content=result)

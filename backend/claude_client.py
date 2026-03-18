@@ -18,23 +18,41 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
+_MAX_API_BYTES = 3_900_000  # Claude API base64 limit is 5MB; raw bytes must stay under ~3.9MB
+
+
 def _resize_if_needed(image_bytes: bytes, media_type: str) -> tuple[bytes, str]:
-    """Resize image to max 2048px on longest side if needed. Returns (bytes, media_type)."""
+    """Resize/recompress image so it fits within Claude's API size and dimension limits."""
     try:
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
-        if max(w, h) <= 2048:
-            return image_bytes, media_type
 
-        ratio = 2048 / max(w, h)
-        new_size = (int(w * ratio), int(h * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
+        # Downscale if wider/taller than 2048px
+        if max(w, h) > 2048:
+            ratio = 2048 / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+            w, h = img.size
 
         if img.mode == "RGBA":
             img = img.convert("RGB")
 
+        # If already small enough as-is, return original bytes
+        if len(image_bytes) <= _MAX_API_BYTES and max(w, h) <= 2048:
+            # Still need to re-encode if we changed size/mode above
+            if img.size == Image.open(io.BytesIO(image_bytes)).size:
+                return image_bytes, media_type
+
+        # Encode as JPEG, reducing quality until under the byte limit
+        for quality in (90, 75, 60, 45):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            if buf.tell() <= _MAX_API_BYTES:
+                return buf.getvalue(), "image/jpeg"
+
+        # Last resort: halve dimensions and encode at 60
+        img = img.resize((w // 2, h // 2), Image.LANCZOS)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=90)
+        img.save(buf, format="JPEG", quality=60)
         return buf.getvalue(), "image/jpeg"
     except Exception:
         return image_bytes, media_type
@@ -47,9 +65,11 @@ def analyze_image(image_bytes: bytes, media_type: str, exif_summary: str) -> dic
     user_message = build_user_message(exif_summary)
 
     client = _get_client()
+    model = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
     response = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=1024,
+        model=model,
+        max_tokens=1500,
+        temperature=0.2,
         system=SYSTEM_PROMPT,
         messages=[
             {
