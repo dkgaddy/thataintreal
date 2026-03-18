@@ -16,6 +16,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://thataintreal.explosiveconcepts.com",
+        "https://thataintreal-production.up.railway.app",
         "http://localhost:8082",
         "http://127.0.0.1:8082",
         "http://localhost:8083",
